@@ -200,10 +200,16 @@ class AGMW extends WP_Widget {
 	protected function get_fields(){
 		$fields = array();
 		$fields[] = array(
-			'name' => 'title',
-			'type' => 'textarea',
+			'type' => 'checkbox',
+			'name' => 'checkbox',
 			'label' => __('Title', $this->get_widget_slug()),
-			'description' => __('Title', $this->get_widget_slug())
+			'description' => __('Description', $this->get_widget_slug()),
+			'options' => array(
+				'1' => 'One',
+				'2' => 'Two',
+				'3' => 'Three',
+				'4' => 'Four'
+			)
 		);
 		return $fields;
 	}
@@ -230,6 +236,15 @@ class AGMW extends WP_Widget {
 		$value = (isset($instance[$field['name']])) ? $instance[$field['name']] : $field['value'];
 		if($field['name'] == 'title'){
 			$value = apply_filters( 'widget_title', $value );
+		}
+		switch ($field['type']) {
+			case 'checkbox':
+					$value = (array)$value;
+				break;
+			
+			default:
+				# code...
+				break;
 		}
 		if(!empty($field['filter_data']) && is_string($field['filter_data'])){
 			$value = apply_filters( $field['filter_data'], $value, $field );
@@ -312,6 +327,23 @@ class AGMW extends WP_Widget {
 						$output .= '<br /><small>'.$field['description'].'</small>';
 					}
 					$output .= '</p>';
+					break;
+
+				case 'checkbox':
+					if(!empty($field['options']) && is_array($field['options'])){
+						$output .= '<p>';
+						if($field['label']){
+							$output .= '<label>'.$field['label'].'</label><br />';
+						}
+						if($field['description']){
+							$output .= '<small>'.$field['description'].'</small><br />';
+						}
+						foreach ($field['options'] as $opt_value => $opt_label) {
+							$checked = (in_array($opt_value, $this->get_field_value($field, $instance))) ? ' checked="checked"' : '';
+							$output .= '<label><input type="checkbox" name="'. $this->get_field_name( $field['name'] ) .'[]" value="'.$opt_value.'"'.$checked.'>'.$opt_label.'</label><br />';
+						}
+						$output .= '</p>';
+					}
 					break;
 				
 				default:
