@@ -32,6 +32,8 @@ class AGMW extends WP_Widget {
 
     protected $height = 350;
 
+    protected $user;
+
 	/*--------------------------------------------------*/
 	/* Constructor
 	/*--------------------------------------------------*/
@@ -42,6 +44,8 @@ class AGMW extends WP_Widget {
 	 */
 	public function __construct() {
 
+		$this->user = wp_get_current_user();
+
 		// load plugin text domain
 		add_action( 'init', array( $this, 'agmw_textdomain' ) );
 
@@ -51,12 +55,15 @@ class AGMW extends WP_Widget {
 
 		parent::__construct(
 			$this->get_widget_slug(),
-			__( 'Advanced Google Map', $this->get_widget_slug() ),
+			$this->get_widget_name(),
 			array(
-				'classname'  => $this->get_widget_slug().'-class',
-				'description' => __( 'Show advanced googe map on your wordpress widget.', $this->get_widget_slug() )
+				'classname'  => $this->get_widget_class(),
+				'description' => $this->get_widget_description()
 			),
-			array('width' => $this->width, 'height' => $this->height)
+			array(
+				'width' => $this->width, 
+				'height' => $this->height
+			)
 		);
 
 		// Register admin styles and scripts
@@ -85,6 +92,46 @@ class AGMW extends WP_Widget {
     public function get_widget_slug() {
         return $this->widget_slug;
     }
+
+    /**
+     * Return the widget name.
+     *
+     * @since    1.0.0
+     *
+     * @return    Plugin name variable.
+     */
+    public function get_widget_name() {
+        return __( 'Advanced Google Map', $this->get_widget_slug() );
+    }
+
+    /**
+     * Return the widget description.
+     *
+     * @since    1.0.0
+     *
+     * @return    Plugin description variable.
+     */
+    public function get_widget_description() {
+        return __( 'Show advanced googe map on your wordpress widget.', $this->get_widget_slug() );
+    }
+
+    /**
+     * Return the widget class.
+     *
+     * @since    1.0.0
+     *
+     * @return    Plugin class variable.
+     */
+    public function get_widget_class() {
+        return $this->widget_slug.'-class';
+    }
+	
+	/**
+     * Delete widget cache
+     */
+	public function flush_widget_cache() {
+    	wp_cache_delete( $this->get_widget_slug(), 'widget' );
+	}
 
 	/*--------------------------------------------------*/
 	/* Widget API Functions
@@ -129,11 +176,7 @@ class AGMW extends WP_Widget {
 		print $widget_string;
 
 	} // end widget
-	
-	
-	public function flush_widget_cache() {
-    	wp_cache_delete( $this->get_widget_slug(), 'widget' );
-	}
+
 	/**
 	 * Processes the widget's options to be saved.
 	 *
@@ -142,7 +185,7 @@ class AGMW extends WP_Widget {
 	 */
 	
 	public function update( $new_instance, $old_instance ) {
-		return $this->saveFields( $new_instance, $old_instance );
+		return $this->get_fields_value( $new_instance, $old_instance );
 	} // end widget
 
 	/**
@@ -151,42 +194,98 @@ class AGMW extends WP_Widget {
 	 * @param array instance The array of keys and values for the widget.
 	 */
 	public function form( $instance ) {
-		$this->buildFields($instance);
+		$this->build_form($instance);
 	} // end form
 
-	private function getFields(){
+	protected function get_fields(){
 		$fields = array();
 		$fields[] = array(
-			'id' => 'title',
+			'name' => 'title',
 			'type' => 'textarea',
 			'label' => __('Title', $this->get_widget_slug()),
-			'description' => __('Title', $this->get_widget_slug()),
+			'description' => __('Title', $this->get_widget_slug())
 		);
 		return $fields;
 	}
 
-	private function parseField($field){
+	protected function parse_field($field){
 		$defaults = array(
-			'id' => '',
 			'type' => '',
+			'name' => '',
 			'label' => '',
 			'description' => '',
 			'value' => '',
-			'class' => 'widefat'
+			'options' => array(),
+			'class' => 'widefat',
+			'filter_data' => '',
+			'filter_view' => '',
+			'capability' => array(),
+			'role' => array()
 		);
 		return wp_parse_args( $field, $defaults );
 	}
 
-	private function getValue($field, $instance){
-		return (isset($instance[$field['id']])) ? $instance[$field['id']] : $field['value'];
+	protected function get_field_value($field, $instance, $old_instance=array()){
+		$field = $this->parse_field( $field );
+		$value = (isset($instance[$field['name']])) ? $instance[$field['name']] : $field['value'];
+		if($field['name'] == 'title'){
+			$value = apply_filters( 'widget_title', $value );
+		}
+		if(!empty($field['filter_data']) && is_string($field['filter_data'])){
+			$value = apply_filters( $field['filter_data'], $value, $field );
+		}
+		return $value;
 	}
 
-	private function buildField($field, $instance){
+	protected function get_fields_value($new_instance, $old_instance=array()){
+		$instance = array();
+		foreach ($this->get_fields() as $key => $field) {
+			if(!$this->allow_field($field)){
+				continue;
+			}
+			if(isset($new_instance[$field['name']])){
+				$instance[$field['name']] = $this->get_field_value($field, $new_instance, $old_instance);
+			}
+		}
+		return $instance;
+	}
+
+	protected function allow_field($field){
+		$field = $this->parse_field( $field );
+		$allow = true;
+		if($field['capability'] && is_array($field['capability'])){
+			$allow = false;
+			if(is_array($field['capability'])){
+				foreach ($field['capability'] as $capability) {
+					if (is_string($capability) && current_user_can($capability)) {
+						$allow = true;
+						break;
+					}
+				}
+			}elseif (is_string($field['capability'])) {
+				if(current_user_can($field['capability'])){
+					$allow = true;
+				}
+			}
+		}
+		if($field['role'] && is_array($field['role'])){
+			$allow = false;
+			if ( !empty( $this->user->roles ) && is_array( $this->user->roles ) ) {
+				foreach ( $user->roles as $role ){
+					if(in_array($role, $field['role'])){
+						$allow = true;
+						break;						
+					}
+				}
+			}
+		}
+		return $allow;
+	}
+
+	protected function build_field($field, $instance){
+		$field = $this->parse_field( $field );
 		$output = '';
-
-		$field = $this->parseField( $field );
-
-		if(!empty($field['id'])){
+		if(!empty($field['name'])){
 			switch ($field['type']) {
 				case 'textbox':
 				case 'email':
@@ -194,20 +293,21 @@ class AGMW extends WP_Widget {
 				case 'password':
 					$output .= '<p>';
 					if($field['label']){
-						$output .= '<label for="'.$this->get_field_id($field['id']).'">'.$field['label'].'</label>';
+						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
 					}
-					$output .= '<input type="'.$field['type'].'" id="'.$this->get_field_id($field['id']).'" name="'.$this->get_field_name($field['id']).'" value="'.$this->getValue($field, $instance).'" class="'.$field['class'].'">';
+					$output .= '<input type="'.$field['type'].'" id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" value="'.$this->get_field_value($field, $instance).'" class="'.$field['class'].'">';
 					if($field['description']){
 						$output .= '<br /><small>'.$field['description'].'</small>';
 					}
 					$output .= '</p>';
 					break;
+
 				case 'textarea':
 					$output .= '<p>';
 					if($field['label']){
-						$output .= '<label for="'.$this->get_field_id($field['id']).'">'.$field['label'].'</label>';
+						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
 					}
-					$output .= '<textarea id="'.$this->get_field_id($field['id']).'" name="'.$this->get_field_name($field['id']).'" class="'.$field['class'].'">'.$this->getValue($field, $instance).'</textarea>';
+					$output .= '<textarea id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" class="'.$field['class'].'">'.$this->get_field_value($field, $instance).'</textarea>';
 					if($field['description']){
 						$output .= '<br /><small>'.$field['description'].'</small>';
 					}
@@ -222,21 +322,24 @@ class AGMW extends WP_Widget {
 		return $output;
 	}
 
-	private function buildFields($instance, $echo = true){
+	protected function build_form($instance, $echo = true){
 		$output = '';
-		foreach ($this->getFields() as $key => $field) {
-			$output .= $this->buildField($field, $instance);
+		foreach ($this->get_fields() as $key => $field) {
+			if(!$this->allow_field($field)){
+				continue;
+			}
+			$output_temp = $this->build_field($field, $instance);
+			if(!empty($field['filter_view']) && is_string($field['filter_view'])){
+				$output_temp = apply_filters( $field['filter_view'], $output_temp, $field );
+			}
+			$output .= $output_temp;
 		}
+		$output = apply_filters( $this->get_widget_slug().'build_form', $output, $this->get_fields() );
 		if($echo){
 			echo $output;
 		}else{
 			return $output;
 		}
-	}
-
-	private function saveFields($new_instance, $old_instance){
-		$instance = $new_instance;
-		return $new_instance;
 	}
 
 	/*--------------------------------------------------*/
