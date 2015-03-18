@@ -1,1 +1,19 @@
 /* This stylesheet is used to style the admin option form of the widget. */
+.image-uploader .button {/*
+	width: 100%;
+	height: 34px;
+	line-height: 33px;*/
+}
+		/*.tribe_preview .aligncenter {
+			display: block;
+			margin-left: auto !important;
+			margin-right: auto !important;
+		}
+		.tribe_preview {
+			overflow: hidden;
+			max-height: 300px;
+		}
+		.tribe_preview img {
+			margin: 10px 0;
+			height: auto;
+		}*/

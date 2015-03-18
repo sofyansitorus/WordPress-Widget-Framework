@@ -54,7 +54,7 @@ class AGMW extends WP_Widget {
 		register_deactivation_hook( __FILE__, array( $this, 'deactivate' ) );
 
 		parent::__construct(
-			$this->get_widget_slug(),
+			$this->get_slug(),
 			$this->get_widget_name(),
 			array(
 				'classname'  => $this->get_widget_class(),
@@ -89,7 +89,7 @@ class AGMW extends WP_Widget {
      *
      * @return    Plugin slug variable.
      */
-    public function get_widget_slug() {
+    public function get_slug() {
         return $this->widget_slug;
     }
 
@@ -101,7 +101,7 @@ class AGMW extends WP_Widget {
      * @return    Plugin name variable.
      */
     public function get_widget_name() {
-        return __( 'Advanced Google Map', $this->get_widget_slug() );
+        return __( 'Advanced Google Map', $this->get_slug() );
     }
 
     /**
@@ -112,7 +112,7 @@ class AGMW extends WP_Widget {
      * @return    Plugin description variable.
      */
     public function get_widget_description() {
-        return __( 'Show advanced googe map on your wordpress widget.', $this->get_widget_slug() );
+        return __( 'Show advanced googe map on your wordpress widget.', $this->get_slug() );
     }
 
     /**
@@ -130,7 +130,7 @@ class AGMW extends WP_Widget {
      * Delete widget cache
      */
 	public function flush_widget_cache() {
-    	wp_cache_delete( $this->get_widget_slug(), 'widget' );
+    	wp_cache_delete( $this->get_slug(), 'widget' );
 	}
 
 	/*--------------------------------------------------*/
@@ -147,7 +147,7 @@ class AGMW extends WP_Widget {
 
 		
 		// Check if there is a cached output
-		$cache = wp_cache_get( $this->get_widget_slug(), 'widget' );
+		$cache = wp_cache_get( $this->get_slug(), 'widget' );
 
 		if ( !is_array( $cache ) )
 			$cache = array();
@@ -171,7 +171,7 @@ class AGMW extends WP_Widget {
 
 		$cache[ $args['widget_id'] ] = $widget_string;
 
-		wp_cache_set( $this->get_widget_slug(), $cache, 'widget' );
+		wp_cache_set( $this->get_slug(), $cache, 'widget' );
 
 		print $widget_string;
 
@@ -200,10 +200,10 @@ class AGMW extends WP_Widget {
 	protected function get_fields(){
 		$fields = array();
 		$fields[] = array(
-			'type' => 'checkbox',
-			'name' => 'checkbox',
-			'label' => __('Title', $this->get_widget_slug()),
-			'description' => __('Description', $this->get_widget_slug()),
+			'type' => 'image',
+			'name' => 'image',
+			'label' => __('Input Label', $this->get_slug()),
+			'description' => __('Input Description', $this->get_slug()),
 			'options' => array(
 				'1' => 'One',
 				'2' => 'Two',
@@ -237,6 +237,9 @@ class AGMW extends WP_Widget {
 		if($field['name'] == 'title'){
 			$value = apply_filters( 'widget_title', $value );
 		}
+		if(!empty($field['filter_data']) && is_string($field['filter_data'])){
+			$value = apply_filters( $field['filter_data'], $value, $field );
+		}
 		switch ($field['type']) {
 			case 'checkbox':
 					$value = (array)$value;
@@ -245,9 +248,6 @@ class AGMW extends WP_Widget {
 			default:
 				# code...
 				break;
-		}
-		if(!empty($field['filter_data']) && is_string($field['filter_data'])){
-			$value = apply_filters( $field['filter_data'], $value, $field );
 		}
 		return $value;
 	}
@@ -345,6 +345,50 @@ class AGMW extends WP_Widget {
 						$output .= '</p>';
 					}
 					break;
+
+				case 'dropdown':
+					$output .= '<p>';
+					if($field['label']){
+						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
+					}
+					$output .= '<select id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" class="'.$field['class'].'">';
+					if(!empty($field['options']) && is_array($field['options'])){
+						foreach ($field['options'] as $opt_value => $opt_label) {
+							$selected = ($this->get_field_value($field, $instance) == $opt_value) ? ' selected="selected"' : '';
+							$output .= '<option value="'.$opt_value.'"'.$selected.'>'.$opt_label.'</option>';
+						}
+					}
+					$output .= '</select>';
+					if($field['description']){
+						$output .= '<br /><small>'.$field['description'].'</small>';
+					}
+					$output .= '</p>';
+					break;
+
+				case 'image':
+					$output .= '<p>';
+					if($field['label']){
+						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
+					}
+					$output .= '<div class="image-uploader">';
+					$output .= '<div class="image-preview">';
+					if($this->get_field_value($field, $instance)){
+						$output .= wp_get_attachment_image( $this->get_field_value($field, $instance), 'thumbnail', true);
+					}
+					$output .= '</div>';
+					$output .= '<button type="submit" class="button media-select" onclick="return false;">'.__('Select', $this->get_slug()).'</button>';
+					if($this->get_field_value($field, $instance)){
+						$output .= '<button type="submit" class="button media-delete" onclick="return false;">'.__('Delete', $this->get_slug()).'</button>';
+					}else{
+						$output .= '<button type="submit" class="button media-delete" onclick="return false;" style="display:none;">'.__('Delete', $this->get_slug()).'</button>';
+					}
+					$output .= '<input type="hidden" id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" value="'.$this->get_field_value($field, $instance).'" class="image-id">';
+					$output .= '</div>';
+					if($field['description']){
+						$output .= '<br /><small>'.$field['description'].'</small>';
+					}
+					$output .= '</p>';
+					break;
 				
 				default:
 					# code...
@@ -366,7 +410,7 @@ class AGMW extends WP_Widget {
 			}
 			$output .= $output_temp;
 		}
-		$output = apply_filters( $this->get_widget_slug().'build_form', $output, $this->get_fields() );
+		$output = apply_filters( $this->get_slug().'build_form', $output, $this->get_fields() );
 		if($echo){
 			echo $output;
 		}else{
@@ -383,7 +427,7 @@ class AGMW extends WP_Widget {
 	 */
 	public function agmw_textdomain() {
 
-		load_plugin_textdomain( $this->get_widget_slug(), false, plugin_dir_path( __FILE__ ) . 'lang/' );
+		load_plugin_textdomain( $this->get_slug(), false, plugin_dir_path( __FILE__ ) . 'lang/' );
 
 	} // end agmw_textdomain
 
@@ -410,7 +454,7 @@ class AGMW extends WP_Widget {
 	 */
 	public function register_admin_styles() {
 
-		wp_enqueue_style( $this->get_widget_slug().'-admin-styles', plugins_url( 'assets/css/admin.css', __FILE__ ) );
+		wp_enqueue_style( $this->get_slug().'-admin-styles', plugins_url( 'assets/css/admin.css', __FILE__ ) );
 
 	} // end register_admin_styles
 
@@ -418,7 +462,8 @@ class AGMW extends WP_Widget {
 	 * Registers and enqueues admin-specific JavaScript.
 	 */
 	public function register_admin_scripts() {
-		wp_enqueue_script( $this->get_widget_slug().'-admin-script', plugins_url( 'assets/js/admin.js', __FILE__ ), array('jquery','jquery-ui-core','jquery-ui-tabs') );
+		wp_enqueue_script( $this->get_slug().'-dependsOn', plugins_url( 'assets/js/dependsOn-1.0.1.js', __FILE__ ), array('jquery') );
+		wp_enqueue_script( $this->get_slug().'-admin-script', plugins_url( 'assets/js/admin.js', __FILE__ ), array('jquery') );
 
 	} // end register_admin_scripts
 
@@ -427,7 +472,7 @@ class AGMW extends WP_Widget {
 	 */
 	public function register_widget_styles() {
 
-		wp_enqueue_style( $this->get_widget_slug().'-widget-styles', plugins_url( 'assets/css/widget.css', __FILE__ ) );
+		wp_enqueue_style( $this->get_slug().'-widget-styles', plugins_url( 'assets/css/widget.css', __FILE__ ) );
 
 	} // end register_widget_styles
 
@@ -435,8 +480,8 @@ class AGMW extends WP_Widget {
 	 * Registers and enqueues widget-specific scripts.
 	 */
 	public function register_widget_scripts() {
-
-		wp_enqueue_script( $this->get_widget_slug().'-script', plugins_url( 'assets/js/widget.js', __FILE__ ), array('jquery') );
+		wp_enqueue_media();
+		wp_enqueue_script( $this->get_slug().'-script', plugins_url( 'assets/js/widget.js', __FILE__ ), array('jquery') );
 
 	} // end register_widget_scripts
 
