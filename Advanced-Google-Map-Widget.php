@@ -28,11 +28,17 @@ class AGMW extends WP_Widget {
      */
     protected $widget_slug = 'agmw';
 
-    protected $width = 400;
+    protected $width = 0;
 
-    protected $height = 350;
+    protected $height = 0;
+
+    protected $fields = array();
 
     protected $user;
+
+    protected $jquery_ver = '1.11.1';
+
+    protected $jquery_ui_ver = '1.11.2';
 
 	/*--------------------------------------------------*/
 	/* Constructor
@@ -79,6 +85,22 @@ class AGMW extends WP_Widget {
 		add_action( 'deleted_post', array( $this, 'flush_widget_cache' ) );
 		add_action( 'switch_theme', array( $this, 'flush_widget_cache' ) );
 
+
+		$field = array(
+			'type' => 'date',
+			'name' => 'date',
+			'label' => __('Input Label', $this->get_slug()),
+			'description' => __('Input Description', $this->get_slug()),
+			'options' => array(
+				'1' => 'One',
+				'2' => 'Two',
+				'3' => 'Three',
+				'4' => 'Four'
+			)
+		);
+
+		$this->set_field($field);
+	
 	} // end constructor
 
 
@@ -185,8 +207,8 @@ class AGMW extends WP_Widget {
 	 */
 	
 	public function update( $new_instance, $old_instance ) {
-		return $this->get_fields_value( $new_instance, $old_instance );
-	} // end widget
+		return $this->get_update_instance( $new_instance, $old_instance );
+	} // end update
 
 	/**
 	 * Generates the administration form for the widget.
@@ -197,21 +219,8 @@ class AGMW extends WP_Widget {
 		$this->build_form($instance);
 	} // end form
 
-	protected function get_fields(){
-		$fields = array();
-		$fields[] = array(
-			'type' => 'image',
-			'name' => 'image',
-			'label' => __('Input Label', $this->get_slug()),
-			'description' => __('Input Description', $this->get_slug()),
-			'options' => array(
-				'1' => 'One',
-				'2' => 'Two',
-				'3' => 'Three',
-				'4' => 'Four'
-			)
-		);
-		return $fields;
+	protected function set_field($field){
+		array_push($this->fields, $this->parse_field( $field ));
 	}
 
 	protected function parse_field($field){
@@ -221,18 +230,35 @@ class AGMW extends WP_Widget {
 			'label' => '',
 			'description' => '',
 			'value' => '',
-			'options' => array(),
 			'class' => 'widefat',
 			'filter_data' => '',
 			'filter_view' => '',
 			'capability' => array(),
 			'role' => array()
 		);
+		switch ($field['type']) {
+			case 'checkbox':
+				$defaults['options'] = array();
+				break;
+			case 'radio':
+				$defaults['options'] = array();
+				break;
+			case 'dropdown':
+				$defaults['options'] = array();
+				break;
+			
+			default:
+				# code...
+				break;
+		}
 		return wp_parse_args( $field, $defaults );
 	}
 
+	protected function get_fields(){
+		return $this->fields;
+	}
+
 	protected function get_field_value($field, $instance, $old_instance=array()){
-		$field = $this->parse_field( $field );
 		$value = (isset($instance[$field['name']])) ? $instance[$field['name']] : $field['value'];
 		if($field['name'] == 'title'){
 			$value = apply_filters( 'widget_title', $value );
@@ -252,21 +278,7 @@ class AGMW extends WP_Widget {
 		return $value;
 	}
 
-	protected function get_fields_value($new_instance, $old_instance=array()){
-		$instance = array();
-		foreach ($this->get_fields() as $key => $field) {
-			if(!$this->allow_field($field)){
-				continue;
-			}
-			if(isset($new_instance[$field['name']])){
-				$instance[$field['name']] = $this->get_field_value($field, $new_instance, $old_instance);
-			}
-		}
-		return $instance;
-	}
-
 	protected function allow_field($field){
-		$field = $this->parse_field( $field );
 		$allow = true;
 		if($field['capability'] && is_array($field['capability'])){
 			$allow = false;
@@ -298,14 +310,14 @@ class AGMW extends WP_Widget {
 	}
 
 	protected function build_field($field, $instance){
-		$field = $this->parse_field( $field );
 		$output = '';
 		if(!empty($field['name'])){
 			switch ($field['type']) {
-				case 'textbox':
+				case 'text':
 				case 'email':
 				case 'url':
 				case 'password':
+				case 'date':
 					$output .= '<p>';
 					if($field['label']){
 						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
@@ -341,6 +353,23 @@ class AGMW extends WP_Widget {
 						foreach ($field['options'] as $opt_value => $opt_label) {
 							$checked = (in_array($opt_value, $this->get_field_value($field, $instance))) ? ' checked="checked"' : '';
 							$output .= '<label><input type="checkbox" name="'. $this->get_field_name( $field['name'] ) .'[]" value="'.$opt_value.'"'.$checked.'>'.$opt_label.'</label><br />';
+						}
+						$output .= '</p>';
+					}
+					break;
+
+				case 'radio':
+					if(!empty($field['options']) && is_array($field['options'])){
+						$output .= '<p>';
+						if($field['label']){
+							$output .= '<label>'.$field['label'].'</label><br />';
+						}
+						if($field['description']){
+							$output .= '<small>'.$field['description'].'</small><br />';
+						}
+						foreach ($field['options'] as $opt_value => $opt_label) {
+							$checked = ($opt_value == $this->get_field_value($field, $instance)) ? ' checked="checked"' : '';
+							$output .= '<label><input type="radio" name="'. $this->get_field_name( $field['name'] ) .'" value="'.$opt_value.'"'.$checked.'>'.$opt_label.'</label><br />';
 						}
 						$output .= '</p>';
 					}
@@ -410,12 +439,28 @@ class AGMW extends WP_Widget {
 			}
 			$output .= $output_temp;
 		}
-		$output = apply_filters( $this->get_slug().'build_form', $output, $this->get_fields() );
+		$output = apply_filters( $this->get_slug().'_build_form', $output, $this->get_fields() );
 		if($echo){
 			echo $output;
 		}else{
 			return $output;
 		}
+	}
+
+	protected function get_update_instance($new_instance, $old_instance=array()){
+		$instance = array();
+		foreach ($this->get_fields() as $key => $field) {
+			if(!$this->allow_field($field)){
+				if(isset($old_instance[$field['name']])){
+					$instance[$field['name']] = $this->get_field_value($field, $old_instance);
+				}
+			}else{
+				if(isset($new_instance[$field['name']])){
+					$instance[$field['name']] = $this->get_field_value($field, $new_instance);
+				}
+			}
+		}
+		return $instance;
 	}
 
 	/*--------------------------------------------------*/
@@ -484,6 +529,47 @@ class AGMW extends WP_Widget {
 		wp_enqueue_script( $this->get_slug().'-script', plugins_url( 'assets/js/widget.js', __FILE__ ), array('jquery') );
 
 	} // end register_widget_scripts
+
+
+	/*--------------------------------------------------*/
+	/* Private Functions
+	/*--------------------------------------------------*/
+
+	private function get_jquery_version() {
+
+		global $wp_scripts;
+
+		if( !$wp_scripts instanceof WP_Scripts )
+			$wp_scripts = new WP_Scripts();
+
+		$jquery = $wp_scripts->query( 'jquery' );
+
+		if( !$jquery instanceof _WP_Dependency )
+			return $this->jquery_ver;
+
+		if( !isset( $jquery->ver ) )
+			return $this->jquery_ver;
+
+		return $jquery->ver;
+	}
+
+	private function get_jquery_ui_version() {
+
+		global $wp_scripts;
+
+		if( !$wp_scripts instanceof WP_Scripts )
+			$wp_scripts = new WP_Scripts();
+
+		$jquery_ui_core = $wp_scripts->query( 'jquery-ui-core' );
+
+		if( !$jquery_ui_core instanceof _WP_Dependency )
+			return $this->jquery_ui_ver;
+
+		if( !isset( $jquery_ui_core->ver ) )
+			return $this->jquery_ui_ver;
+
+		return $jquery_ui_core->ver;
+	}
 
 } // end class
 
