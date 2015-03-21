@@ -40,6 +40,8 @@ class AGMW extends WP_Widget {
 
     protected $jquery_ui_ver = '1.11.2';
 
+    protected $wrapper = 'p';
+
 	/*--------------------------------------------------*/
 	/* Constructor
 	/*--------------------------------------------------*/
@@ -77,9 +79,10 @@ class AGMW extends WP_Widget {
 		add_action( 'admin_enqueue_scripts', array( $this, 'register_admin_scripts' ) );
 
 		// Register site styles and scripts
-		add_action( 'wp_enqueue_scripts', array( $this, 'register_widget_styles' ) );
-		add_action( 'wp_enqueue_scripts', array( $this, 'register_widget_scripts' ) );
-
+		if(is_active_widget(false, false, $this->get_slug())){
+			add_action( 'wp_enqueue_scripts', array( $this, 'register_widget_styles' ) );
+			add_action( 'wp_enqueue_scripts', array( $this, 'register_widget_scripts' ) );
+		}
 		// Refreshing the widget's cached output with each new post
 		add_action( 'save_post',    array( $this, 'flush_widget_cache' ) );
 		add_action( 'deleted_post', array( $this, 'flush_widget_cache' ) );
@@ -87,8 +90,8 @@ class AGMW extends WP_Widget {
 
 
 		$field = array(
-			'type' => 'date',
-			'name' => 'date',
+			'type' => 'checkbox',
+			'name' => 'checkbox',
 			'label' => __('Input Label', $this->get_slug()),
 			'description' => __('Input Description', $this->get_slug()),
 			'options' => array(
@@ -145,7 +148,7 @@ class AGMW extends WP_Widget {
      * @return    Plugin class variable.
      */
     public function get_widget_class() {
-        return $this->widget_slug.'-class';
+        return $this->get_slug().'-class';
     }
 	
 	/**
@@ -230,15 +233,17 @@ class AGMW extends WP_Widget {
 			'label' => '',
 			'description' => '',
 			'value' => '',
-			'class' => 'widefat',
+			'attr' => array('class'=>'widefat'),
 			'filter_data' => '',
 			'filter_view' => '',
 			'capability' => array(),
-			'role' => array()
+			'role' => array(),
+			'dependency' => array()
 		);
 		switch ($field['type']) {
 			case 'checkbox':
 				$defaults['options'] = array();
+				$defaults['attr'] = array('class'=>'checkbox');
 				break;
 			case 'radio':
 				$defaults['options'] = array();
@@ -258,7 +263,7 @@ class AGMW extends WP_Widget {
 		return $this->fields;
 	}
 
-	protected function get_field_value($field, $instance, $old_instance=array()){
+	protected function get_field_value($field, $instance){
 		$value = (isset($instance[$field['name']])) ? $instance[$field['name']] : $field['value'];
 		if($field['name'] == 'title'){
 			$value = apply_filters( 'widget_title', $value );
@@ -268,14 +273,39 @@ class AGMW extends WP_Widget {
 		}
 		switch ($field['type']) {
 			case 'checkbox':
-					$value = (array)$value;
+					$value = array_map('esc_attr', (array) $value);
+				break;
+			case 'url':
+					$value = esc_url($value);
+				break;
+			case 'email':
+					$value = sanitize_email($value);
+				break;
+			case 'textarea':
+					$value = esc_textarea($value);
 				break;
 			
 			default:
-				# code...
+				if(is_array($value)){
+					$value = array_map('esc_attr', $value);
+				}else{
+					$value = esc_attr($value);
+				}
 				break;
 		}
 		return $value;
+	}
+
+	protected function get_field_attr($field){
+		$attrs = array();
+		if($field['attr'] && is_array($field['attr'])){
+			foreach ($field['attr'] as $key => $value) {
+				if (!in_array($key, array('type','id','name','value'))) {
+					$attrs[] = $key.'="'.esc_attr($value).'"';
+				}
+			}
+		}
+		return implode(" ", $attrs);
 	}
 
 	protected function allow_field($field){
@@ -311,76 +341,48 @@ class AGMW extends WP_Widget {
 
 	protected function build_field($field, $instance){
 		$output = '';
+		
 		if(!empty($field['name'])){
+			$output .= '<'.$this->wrapper.'>';
+			if($field['label']){
+				$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
+			}
+			if($field['description']){
+				$output .= '<br /><small>'.$field['description'].'</small><br />';
+			}
 			switch ($field['type']) {
 				case 'text':
 				case 'email':
 				case 'url':
 				case 'password':
 				case 'date':
-					$output .= '<p>';
-					if($field['label']){
-						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
-					}
-					$output .= '<input type="'.$field['type'].'" id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" value="'.$this->get_field_value($field, $instance).'" class="'.$field['class'].'">';
-					if($field['description']){
-						$output .= '<br /><small>'.$field['description'].'</small>';
-					}
-					$output .= '</p>';
+					$output .= '<input type="'.$field['type'].'" id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" value="'.$this->get_field_value($field, $instance).'" '.$this->get_field_attr($field).'>';
 					break;
 
 				case 'textarea':
-					$output .= '<p>';
-					if($field['label']){
-						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
-					}
-					$output .= '<textarea id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" class="'.$field['class'].'">'.$this->get_field_value($field, $instance).'</textarea>';
-					if($field['description']){
-						$output .= '<br /><small>'.$field['description'].'</small>';
-					}
-					$output .= '</p>';
+					$output .= '<textarea id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" '.$this->get_field_value($field, $instance).'</textarea>';
 					break;
 
 				case 'checkbox':
 					if(!empty($field['options']) && is_array($field['options'])){
-						$output .= '<p>';
-						if($field['label']){
-							$output .= '<label>'.$field['label'].'</label><br />';
-						}
-						if($field['description']){
-							$output .= '<small>'.$field['description'].'</small><br />';
-						}
 						foreach ($field['options'] as $opt_value => $opt_label) {
 							$checked = (in_array($opt_value, $this->get_field_value($field, $instance))) ? ' checked="checked"' : '';
 							$output .= '<label><input type="checkbox" name="'. $this->get_field_name( $field['name'] ) .'[]" value="'.$opt_value.'"'.$checked.'>'.$opt_label.'</label><br />';
 						}
-						$output .= '</p>';
 					}
 					break;
 
 				case 'radio':
 					if(!empty($field['options']) && is_array($field['options'])){
-						$output .= '<p>';
-						if($field['label']){
-							$output .= '<label>'.$field['label'].'</label><br />';
-						}
-						if($field['description']){
-							$output .= '<small>'.$field['description'].'</small><br />';
-						}
 						foreach ($field['options'] as $opt_value => $opt_label) {
 							$checked = ($opt_value == $this->get_field_value($field, $instance)) ? ' checked="checked"' : '';
 							$output .= '<label><input type="radio" name="'. $this->get_field_name( $field['name'] ) .'" value="'.$opt_value.'"'.$checked.'>'.$opt_label.'</label><br />';
 						}
-						$output .= '</p>';
 					}
 					break;
 
 				case 'dropdown':
-					$output .= '<p>';
-					if($field['label']){
-						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
-					}
-					$output .= '<select id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" class="'.$field['class'].'">';
+					$output .= '<select id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'">';
 					if(!empty($field['options']) && is_array($field['options'])){
 						foreach ($field['options'] as $opt_value => $opt_label) {
 							$selected = ($this->get_field_value($field, $instance) == $opt_value) ? ' selected="selected"' : '';
@@ -388,17 +390,9 @@ class AGMW extends WP_Widget {
 						}
 					}
 					$output .= '</select>';
-					if($field['description']){
-						$output .= '<br /><small>'.$field['description'].'</small>';
-					}
-					$output .= '</p>';
 					break;
 
 				case 'image':
-					$output .= '<p>';
-					if($field['label']){
-						$output .= '<label for="'.$this->get_field_id($field['name']).'">'.$field['label'].'</label>';
-					}
 					$output .= '<div class="image-uploader">';
 					$output .= '<div class="image-preview">';
 					if($this->get_field_value($field, $instance)){
@@ -413,21 +407,30 @@ class AGMW extends WP_Widget {
 					}
 					$output .= '<input type="hidden" id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'" value="'.$this->get_field_value($field, $instance).'" class="image-id">';
 					$output .= '</div>';
-					if($field['description']){
-						$output .= '<br /><small>'.$field['description'].'</small>';
+					break;
+
+				case 'wpeditor':
+					$output .= '<select id="'.$this->get_field_id($field['name']).'" name="'.$this->get_field_name($field['name']).'">';
+					if(!empty($field['options']) && is_array($field['options'])){
+						foreach ($field['options'] as $opt_value => $opt_label) {
+							$selected = ($this->get_field_value($field, $instance) == $opt_value) ? ' selected="selected"' : '';
+							$output .= '<option value="'.$opt_value.'"'.$selected.'>'.$opt_label.'</option>';
+						}
 					}
-					$output .= '</p>';
+					$output .= '</select>';
 					break;
 				
 				default:
 					# code...
 					break;
 			}
+			$output .= '</'.$this->wrapper.'>';
 		}
 		return $output;
 	}
 
 	protected function build_form($instance, $echo = true){
+		$has_dependency = false;
 		$output = '';
 		foreach ($this->get_fields() as $key => $field) {
 			if(!$this->allow_field($field)){
